@@ -7,25 +7,27 @@ public class CameraRenderer
 {
     private Camera _camera;
     private ScriptableRenderContext _context;
-    private CommandBuffer _commandBuffer = new CommandBuffer();
+    private CommandBuffer _cmd = new CommandBuffer();
     private CullingResults _cullingResults;
     private readonly string sBufferName = "RenderCamera";
+    private TinyRenderPipeline _pipeline;
     
-    public void Render(ScriptableRenderContext context, Camera camera)
+    
+    public void Render(TinyRenderPipeline pipeline, ScriptableRenderContext context, Camera camera)
     {
-        Init(context, camera);
+        Init(pipeline, context, camera);
         if (!Cull())
             return;
         
         Setup();
         
         DrawGeometryPass();
-        DrawVisibleGeometry();
-        
+        LightingPass();
+        DrawSkyBox();
         Submit();
     }
 
-    void DrawVisibleGeometry() 
+    void DrawSkyBox() 
     {
         _context.DrawSkybox(_camera);
     }
@@ -33,28 +35,29 @@ public class CameraRenderer
 
     void ExecuteBuffer()
     {
-        _context.ExecuteCommandBuffer(_commandBuffer);
-        _commandBuffer.Clear();
+        _context.ExecuteCommandBuffer(_cmd);
+        _cmd.Clear();
     }
 
-    void Init(ScriptableRenderContext context, Camera camera)
+    void Init(TinyRenderPipeline pipeline, ScriptableRenderContext context, Camera camera)
     {
+        _pipeline = pipeline;
         _context = context;
         _camera = camera;
     }
     
     void Setup()
     {
-        _commandBuffer.name = sBufferName;
+        _cmd.name = sBufferName;
         _context.SetupCameraProperties(_camera);
-        _commandBuffer.ClearRenderTarget(true, true, Color.clear);
-        _commandBuffer.BeginSample(sBufferName);
+        _cmd.ClearRenderTarget(true, true, Color.clear);
+        _cmd.BeginSample(sBufferName);
         ExecuteBuffer();
     }
     
     void Submit() 
     {
-        _commandBuffer.EndSample(sBufferName);
+        _cmd.EndSample(sBufferName);
         ExecuteBuffer();
         _context.Submit();
     }
@@ -71,10 +74,30 @@ public class CameraRenderer
 
     void DrawGeometryPass()
     {
+        _cmd.BeginSample("GeometryPass");
+        {
+            
+        }
+        RenderTargetIdentifier identifier = _pipeline._depthMap;
+        _cmd.SetRenderTarget(_pipeline.gBufferIDs, _pipeline._depthMap);
+        _cmd.ClearRenderTarget(true, true, Color.clear);
         ShaderTagId shaderTagId = new ShaderTagId("GeometryPass");   
         SortingSettings sortingSettings = new SortingSettings(_camera);
         DrawingSettings drawingSettings = new DrawingSettings(shaderTagId, sortingSettings);
         FilteringSettings filteringSettings = FilteringSettings.defaultValue;
         _context.DrawRenderers(_cullingResults, ref drawingSettings, ref filteringSettings);
+        
+        _cmd.EndSample("GeometryPass");
+    }
+
+    void LightingPass()
+    {
+        // int kernelIndex = _lightingPassShader.FindKernel("LightingPassCS");
+        // mat.SetTexture("gBuffer0", _pipeline._gBufferMaps[0]);
+        // mat.SetTexture("gBuffer1", _pipeline._gBufferMaps[0]);
+        // mat.SetTexture("gBuffer2", _pipeline._gBufferMaps[0]);
+        // mat.SetTexture("gOutputMap", _camera.targetTexture);
+        // _cmd.DispatchCompute();
+        // Debug.Log("111");
     }
 }

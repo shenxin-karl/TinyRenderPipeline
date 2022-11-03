@@ -40,10 +40,21 @@ Shader "Unlit/GeometryPass"
                 return vout;
             }
 
-            fixed4 frag (VertexOut pin) : SV_Target
+
+            struct PixelOut {
+                fixed4 gBuffer0 : SV_Target0;
+                fixed4 gBuffer1 : SV_Target1;
+                fixed4 gBuffer2 : SV_Target2;
+            };
+            
+            PixelOut frag (VertexOut pin) : SV_Target
             {
+                PixelOut pout;
                 fixed4 col = tex2D(_MainTex, pin.uv);
-                return col;
+                pout.gBuffer0 = col;
+                pout.gBuffer1 = float4(1.0, 0.0, 0.0, 1.0);
+                pout.gBuffer2 = float4(0.0, 1.0, 0.0, 1.0);
+                return pout;
             }
             ENDCG
         }
