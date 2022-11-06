@@ -1,103 +1,142 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-public class CameraRenderer  
-{
-    private Camera _camera;
+public class CameraRenderer {
     private ScriptableRenderContext _context;
-    private CommandBuffer _cmd = new CommandBuffer();
-    private CullingResults _cullingResults;
-    private readonly string sBufferName = "RenderCamera";
     private TinyRenderPipeline _pipeline;
+    private LightingPass _lightingPass;
+
+    public Camera camera;
+    public int width = -1;
+    public int height = -1;
+
+    private static readonly int kGBufferCount = 3;
     
+    public RenderTexture depthMap;
+    public RenderTexture[] gBufferMaps = new RenderTexture[kGBufferCount];
+    public RenderTexture screenMap;
+    public RenderTargetIdentifier[] gBufferID = new RenderTargetIdentifier[kGBufferCount];
+    public RenderTargetIdentifier depthMapID;
+    public RenderTargetIdentifier screenMapID;
+
+    public Matrix4x4 matInvViewProj;
+
+    public CameraRenderer() {
+        _lightingPass = new LightingPass();
+    }
+
+    ~CameraRenderer() {
+        Clear();
+    }
+
+    private void Clear() {
+        RenderTexture.ReleaseTemporary(depthMap);
+        RenderTexture.ReleaseTemporary(screenMap);
+        RenderTexture.ReleaseTemporary(gBufferMaps[0]);
+        RenderTexture.ReleaseTemporary(gBufferMaps[1]);
+        RenderTexture.ReleaseTemporary(gBufferMaps[2]);
+    }
     
-    public void Render(TinyRenderPipeline pipeline, ScriptableRenderContext context, Camera camera)
-    {
+    private void Resize(int width, int height) {
+        width = Math.Max(width, 1);
+        height = Math.Max(height, 1);
+
+        Clear();
+        depthMap = RenderTexture.GetTemporary(width, height, 24, RenderTextureFormat.Depth, RenderTextureReadWrite.Linear);
+        screenMap = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        gBufferMaps[0] = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+        gBufferMaps[1] = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB2101010, RenderTextureReadWrite.Linear);
+        gBufferMaps[2] = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB64, RenderTextureReadWrite.Linear);
+        for (int i = 0; i < kGBufferCount; ++i) {
+            gBufferMaps[i].name = $"gBuffer{i}";  
+            gBufferID[i] = gBufferMaps[i];
+        }
+
+        depthMap.name = "DepthMap";
+        screenMap.name = "ScreenMap";
+        
+        depthMapID = depthMap;
+        screenMapID = screenMap;
+
+        screenMap.enableRandomWrite = true;
+    }
+
+    public void Render(TinyRenderPipeline pipeline, ScriptableRenderContext context, Camera camera) {
         Init(pipeline, context, camera);
-        if (!Cull())
-            return;
-        
-        Setup();
-        
-        DrawGeometryPass();
+        GeometryPass();
         LightingPass();
         DrawSkyBox();
-        Submit();
+        Blit();
     }
 
-    void DrawSkyBox() 
-    {
-        _context.DrawSkybox(_camera);
+    public void ExecuteAndClearCmd(CommandBuffer cmd) {
+        _context.ExecuteCommandBuffer(cmd);
+        cmd.Clear();
     }
-
-
-    void ExecuteBuffer()
-    {
-        _context.ExecuteCommandBuffer(_cmd);
-        _cmd.Clear();
-    }
-
-    void Init(TinyRenderPipeline pipeline, ScriptableRenderContext context, Camera camera)
-    {
+    
+    private void Init(TinyRenderPipeline pipeline, ScriptableRenderContext context, Camera camera) {
         _pipeline = pipeline;
         _context = context;
-        _camera = camera;
+        this.camera = camera;
+
+        Matrix4x4 matView = camera.worldToCameraMatrix;
+        Matrix4x4 matProj = GL.GetGPUProjectionMatrix(camera.projectionMatrix, false);
+        Matrix4x4 matViewProj = matProj * matView;
+        matInvViewProj = matViewProj.inverse;
+        
+        if (width != camera.pixelWidth || height != camera.pixelHeight) {
+            Resize(camera.pixelWidth, camera.pixelHeight);
+            width = camera.pixelWidth;
+            height = camera.pixelHeight;
+        }
     }
-    
-    void Setup()
-    {
-        _cmd.name = sBufferName;
-        _context.SetupCameraProperties(_camera);
-        _cmd.ClearRenderTarget(true, true, Color.clear);
-        _cmd.BeginSample(sBufferName);
-        ExecuteBuffer();
-    }
-    
-    void Submit() 
-    {
-        _cmd.EndSample(sBufferName);
-        ExecuteBuffer();
+
+    private void GeometryPass() {
+        CommandBuffer cmd = new CommandBuffer();
+        cmd.name = "GeometryPass";
+        
+        _context.SetupCameraProperties(camera);
+        cmd.SetRenderTarget(gBufferID, depthMapID);
+        cmd.SetViewport(new Rect(0f, 0f, width, height));
+        cmd.ClearRenderTarget(true, true, Color.clear);
+        ExecuteAndClearCmd(cmd);
+
+        camera.TryGetCullingParameters(out ScriptableCullingParameters p);
+        CullingResults cullingResults = _context.Cull(ref p);
+
+        ShaderTagId shaderTagId = new ShaderTagId("GeometryPass");
+        SortingSettings sortingSettings = new SortingSettings(camera);
+        DrawingSettings drawingSettings = new DrawingSettings(shaderTagId, sortingSettings);
+        FilteringSettings filteringSettings = FilteringSettings.defaultValue;
+        _context.DrawRenderers(cullingResults, ref drawingSettings, ref filteringSettings);
+        ExecuteAndClearCmd(cmd);
+
         _context.Submit();
     }
 
-    bool Cull()
-    {
-        if (_camera.TryGetCullingParameters(out var cullingParameters))
-        {
-            _cullingResults = _context.Cull(ref cullingParameters);
-            return true;
-        }
-        return false;
+    private void LightingPass() {
+        _lightingPass.Execute(this, _context);
     }
 
-    void DrawGeometryPass()
-    {
-        _cmd.BeginSample("GeometryPass");
-        {
-            
-        }
-        RenderTargetIdentifier identifier = _pipeline._depthMap;
-        _cmd.SetRenderTarget(_pipeline.gBufferIDs, _pipeline._depthMap);
-        _cmd.ClearRenderTarget(true, true, Color.clear);
-        ShaderTagId shaderTagId = new ShaderTagId("GeometryPass");   
-        SortingSettings sortingSettings = new SortingSettings(_camera);
-        DrawingSettings drawingSettings = new DrawingSettings(shaderTagId, sortingSettings);
-        FilteringSettings filteringSettings = FilteringSettings.defaultValue;
-        _context.DrawRenderers(_cullingResults, ref drawingSettings, ref filteringSettings);
-        
-        _cmd.EndSample("GeometryPass");
+    private void DrawSkyBox() {
+        CommandBuffer cmd = new CommandBuffer();
+        cmd.name = "DrawSkyBox";
+        cmd.SetRenderTarget(screenMapID, depthMapID);
+        ExecuteAndClearCmd(cmd);
+        _context.DrawSkybox(camera);
+        ExecuteAndClearCmd(cmd);
+        _context.Submit();
     }
 
-    void LightingPass()
-    {
-        // int kernelIndex = _lightingPassShader.FindKernel("LightingPassCS");
-        // mat.SetTexture("gBuffer0", _pipeline._gBufferMaps[0]);
-        // mat.SetTexture("gBuffer1", _pipeline._gBufferMaps[0]);
-        // mat.SetTexture("gBuffer2", _pipeline._gBufferMaps[0]);
-        // mat.SetTexture("gOutputMap", _camera.targetTexture);
-        // _cmd.DispatchCompute();
-        // Debug.Log("111");
+    private void Blit() {
+        CommandBuffer cmd = new CommandBuffer();
+        cmd.name = "Blit";
+        cmd.Blit(screenMap, BuiltinRenderTextureType.CameraTarget);
+        ExecuteAndClearCmd(cmd);
+        _context.Submit();
     }
 }

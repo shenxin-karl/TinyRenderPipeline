@@ -1,13 +1,14 @@
 // Each #kernel tells which function to compile; you can have many kernels
-#pragma kernel LightingPassCS
+#pragma kernel CS
+#pragma enable_d3d11_debug_symbols
 
 // Create a RenderTexture with enableRandomWrite flag and set it
 // with cs.SetTexture
-Texture2D<float4> gBuffer0;
-Texture2D<float4> gBuffer1;
-Texture2D<float4> gBuffer2;
-Texture2D<float>  gDepthMap;
-RWTexture2D<float4> gOutputMap;
+Texture2D<float4> gBuffer0     : register(t0);
+Texture2D<float4> gBuffer1     : register(t1);
+Texture2D<float4> gBuffer2     : register(t2);
+Texture2D<float>  gDepthMap    : register(t3);
+RWTexture2D<float4> gOutputMap : register(u0);
 
 struct ComputeIn {
     uint3 GroupID           : SV_GroupID;           // 3D index of the thread group in the dispatch.
@@ -17,7 +18,7 @@ struct ComputeIn {
 };
 
 [numthreads(8,8,1)]
-void LightingPassCS (ComputeIn cin)
+void CS(ComputeIn cin)
 {
-    gOutputMap[cin.DispatchThreadID.xy] = gBuffer0[cin.DispatchThreadID.xy];
+    gOutputMap[cin.DispatchThreadID.xy] = gBuffer1[cin.DispatchThreadID.xy];
 }
