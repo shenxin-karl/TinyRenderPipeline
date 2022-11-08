@@ -12,3 +12,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b990a9c31d0aac348857ed2b2441d9ab, type: 3}
   m_Name: Pipeline
   m_EditorClassIdentifier: 
+  skyboxCubeMap: {fileID: 8900000, guid: 7db77038279b6604aad86dfbd7a95003, type: 2}
+  brdfLutMap: {fileID: 0}

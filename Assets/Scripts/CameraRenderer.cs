@@ -7,9 +7,11 @@ using UnityEngine.Rendering;
 
 public class CameraRenderer {
     private ScriptableRenderContext _context;
-    private TinyRenderPipeline _pipeline;
+
+    private List<IPass> _passes;
     private LightingPass _lightingPass;
 
+    public TinyRenderPipeline pipeline;
     public Camera camera;
     public int width = -1;
     public int height = -1;
@@ -25,8 +27,12 @@ public class CameraRenderer {
 
     public Matrix4x4 matInvViewProj;
 
-    public CameraRenderer() {
-        _lightingPass = new LightingPass();
+    public CameraRenderer(TinyRenderPipeline pipeline, Camera camera) {
+        this.pipeline = pipeline;
+        this.camera = camera;
+        _passes = new List<IPass>();
+        _lightingPass = new LightingPass(this);
+        _passes.Add(_lightingPass);
     }
 
     ~CameraRenderer() {
@@ -40,12 +46,18 @@ public class CameraRenderer {
         RenderTexture.ReleaseTemporary(gBufferMaps[1]);
         RenderTexture.ReleaseTemporary(gBufferMaps[2]);
     }
-    
-    private void Resize(int width, int height) {
-        width = Math.Max(width, 1);
-        height = Math.Max(height, 1);
 
+    public void Init(ScriptableRenderContext context) {
+        foreach (var pass in _passes)
+            pass.Init(context);
+    }
+    
+    private void Resize(ScriptableRenderContext context, int w, int h) {
+        width = w;
+        height = h;
+        
         Clear();
+        
         depthMap = RenderTexture.GetTemporary(width, height, 24, RenderTextureFormat.Depth, RenderTextureReadWrite.Linear);
         screenMap = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
         gBufferMaps[0] = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
@@ -61,12 +73,13 @@ public class CameraRenderer {
         
         depthMapID = depthMap;
         screenMapID = screenMap;
-
-        screenMap.enableRandomWrite = true;
+        
+        foreach (var pass in _passes)
+            pass.Resize(context, width, height);
     }
 
-    public void Render(TinyRenderPipeline pipeline, ScriptableRenderContext context, Camera camera) {
-        Init(pipeline, context, camera);
+    public void Render(ScriptableRenderContext context) {
+        SetupRender(context);
         GeometryPass();
         LightingPass();
         DrawSkyBox();
@@ -78,20 +91,15 @@ public class CameraRenderer {
         cmd.Clear();
     }
     
-    private void Init(TinyRenderPipeline pipeline, ScriptableRenderContext context, Camera camera) {
-        _pipeline = pipeline;
+    private void SetupRender(ScriptableRenderContext context) {
         _context = context;
-        this.camera = camera;
 
         Matrix4x4 matProj = GL.GetGPUProjectionMatrix(camera.projectionMatrix, false);
         Matrix4x4 vpMatrix = matProj * camera.worldToCameraMatrix;
         matInvViewProj = vpMatrix.inverse;
         
-        if (width != camera.pixelWidth || height != camera.pixelHeight) {
-            Resize(camera.pixelWidth, camera.pixelHeight);
-            width = camera.pixelWidth;
-            height = camera.pixelHeight;
-        }
+        if (width != camera.pixelWidth || height != camera.pixelHeight)
+            Resize(context, camera.pixelWidth, camera.pixelHeight);
     }
 
     private void GeometryPass() {
@@ -118,7 +126,7 @@ public class CameraRenderer {
     }
 
     private void LightingPass() {
-        _lightingPass.Execute(this, _context);
+        _lightingPass.Execute(_context);
     }
 
     private void DrawSkyBox() {

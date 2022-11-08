@@ -15,6 +15,7 @@ Shader "Unlit/LightingPassPS"
             #include "UnityCG.cginc"
             #include "UnityLightingCommon.cginc"
             #include "CookTorrance.cginc"
+            #include "AmbientLighting.cginc"
 
             struct VertexIn {
                 float3 pos : POSITION;
@@ -30,8 +31,8 @@ Shader "Unlit/LightingPassPS"
             sampler2D gBuffer1;
             sampler2D gBuffer2;
             sampler2D gDepthMap;
-            float4x4  gMatInvView;
             float4x4  gMatInvViewProj;
+            float4    gAmbientDiffuseSH[SH3_NUM_VECTOR];
             
             VertexOut vert(VertexIn vin) {
                 VertexOut vout;
@@ -77,7 +78,13 @@ Shader "Unlit/LightingPassPS"
 
                 float3 V = normalize(UnityWorldSpaceViewDir(worldPos));
                 float3 radiance = ComputeDirectionLight(light, materialData, N, V);
+                
+                float3 r = AmbientDiffuse(gAmbientDiffuseSH, N); 
+                return float4(r, 1.0);
+
+                    
                 return float4(radiance, 1.0);
+
             }
             ENDCG
         }
