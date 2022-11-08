@@ -1,16 +1,19 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Net.NetworkInformation;
 using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 
-public class TinyRenderPipeline : RenderPipeline
-{
+public class TinyRenderPipeline : RenderPipeline {
     private Dictionary<string, CameraRenderer> _cameraRenderers;
-
-    public TinyRenderPipeline() {
+    private GenerateIBL _generateIbl;
+    public TinyRenderPipelineAsset pipelineSettings;
+    
+    public TinyRenderPipeline(TinyRenderPipelineAsset asset) {
+        pipelineSettings = asset;
         _cameraRenderers = new Dictionary<string, CameraRenderer>();
     }
     

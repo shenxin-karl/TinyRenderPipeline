@@ -24,28 +24,27 @@ Shader "Unlit/LightingPassPS"
             struct VertexOut {
                 float4 SVPosition : SV_POSITION;
                 float2 uv         : TEXCOORD0;
-                float3 ray        : TEXCOORD1;
             };
 
             sampler2D gBuffer0;
             sampler2D gBuffer1;
             sampler2D gBuffer2;
             sampler2D gDepthMap;
+            float4x4  gMatInvView;
             float4x4  gMatInvViewProj;
-            float4    gFrustumCorners[4]; 
             
             VertexOut vert(VertexIn vin) {
                 VertexOut vout;
                 vout.SVPosition = UnityObjectToClipPos(vin.pos);
                 vout.uv = vin.uv;
-                vout.ray = gFrustumCorners[int(vin.uv.x + (2 * vin.uv.y))];
                 return vout;
             }
             
             float3 GetWorldPosition(VertexOut pin) {
                 float d = UNITY_SAMPLE_DEPTH(tex2D(gDepthMap, pin.uv));
-                float linearDepth = Linear01Depth(d);
-                return _WorldSpaceCameraPos.xyz + (linearDepth * pin.ray);
+                float4 ndc = float4(pin.uv * 2.0 - 1.0, d, 1.0);
+                float4 worldPos = mul(gMatInvViewProj, ndc);
+                return worldPos.xyz / worldPos.w;
             }
 
             float3 GetAlbedo(VertexOut pin) {
@@ -65,7 +64,7 @@ Shader "Unlit/LightingPassPS"
                 float3 N = GetNormal(pin);
                 float3 albedo = GetAlbedo(pin);
                 float3 worldPos = GetWorldPosition(pin);
-                
+               
                 float3 aoRoughnessMetallic = GetAoRoughnessMetallic(pin);
                 float roughness = aoRoughnessMetallic.y;
                 float metallic = aoRoughnessMetallic.z;

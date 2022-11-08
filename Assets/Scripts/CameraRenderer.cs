@@ -49,8 +49,8 @@ public class CameraRenderer {
         depthMap = RenderTexture.GetTemporary(width, height, 24, RenderTextureFormat.Depth, RenderTextureReadWrite.Linear);
         screenMap = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
         gBufferMaps[0] = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
-        gBufferMaps[1] = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB2101010, RenderTextureReadWrite.Linear);
-        gBufferMaps[2] = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB64, RenderTextureReadWrite.Linear);
+        gBufferMaps[1] = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        gBufferMaps[2] = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
         for (int i = 0; i < kGBufferCount; ++i) {
             gBufferMaps[i].name = $"gBuffer{i}";  
             gBufferID[i] = gBufferMaps[i];
@@ -83,10 +83,9 @@ public class CameraRenderer {
         _context = context;
         this.camera = camera;
 
-        Matrix4x4 matView = camera.worldToCameraMatrix;
         Matrix4x4 matProj = GL.GetGPUProjectionMatrix(camera.projectionMatrix, false);
-        Matrix4x4 matViewProj = matProj * matView;
-        matInvViewProj = matViewProj.inverse;
+        Matrix4x4 vpMatrix = matProj * camera.worldToCameraMatrix;
+        matInvViewProj = vpMatrix.inverse;
         
         if (width != camera.pixelWidth || height != camera.pixelHeight) {
             Resize(camera.pixelWidth, camera.pixelHeight);

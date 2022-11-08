@@ -5,9 +5,6 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 public class LightingPass {
-    public readonly int kGroupThreadX = 8;
-    public readonly int kGroupThreadY = 8;
-    private bool _useComputeShader = false;
     private ComputeShader _shader;
     private int _kernelIndex;
     
@@ -16,25 +13,15 @@ public class LightingPass {
     private static readonly int GBuffer1 = Shader.PropertyToID("gBuffer1");
     private static readonly int GBuffer0 = Shader.PropertyToID("gBuffer0");
     private static readonly int GDepthMap = Shader.PropertyToID("gDepthMap");
-    private static readonly int GInvViewProj = Shader.PropertyToID("gInvViewProj");
 
-    private Vector3[] _frustumCorners;
-    private Vector4[] _vectorArray;
-    private static readonly int GFrustumCorners = Shader.PropertyToID("gFrustumCorners");
-
+    private static readonly int GMatInvViewProj = Shader.PropertyToID("gMatInvViewProj");
+    private static readonly int GViewPortRay = Shader.PropertyToID("gViewPortRay");
     public LightingPass() {
-        _shader = Resources.Load<ComputeShader>("Shaders/LightingPassCS");
-        _kernelIndex = _shader.FindKernel("CS");
         _material = new Material(Resources.Load<Shader>("Shaders/LightingPassPS"));
-        _frustumCorners = new Vector3[4];
-        _vectorArray = new Vector4[4];
     }
 
     public void Execute(CameraRenderer cameraRenderer, ScriptableRenderContext context) {
-        if (_useComputeShader)
-            ExecuteComputeShader(cameraRenderer, context);
-        else
-            ExecuteGraphicsShader(cameraRenderer, context);
+        ExecuteGraphicsShader(cameraRenderer, context);
     }
     
     public void ExecuteGraphicsShader(CameraRenderer cameraRenderer, ScriptableRenderContext context) {
@@ -42,30 +29,33 @@ public class LightingPass {
         _material.SetTexture(GBuffer1, cameraRenderer.gBufferMaps[1]);
         _material.SetTexture(GBuffer2, cameraRenderer.gBufferMaps[2]);
         _material.SetTexture(GDepthMap, cameraRenderer.depthMap);
-        _material.SetMatrix(GInvViewProj, cameraRenderer.matInvViewProj);
+        _material.SetMatrix(GMatInvViewProj, cameraRenderer.matInvViewProj);
         
-        cameraRenderer.camera.CalculateFrustumCorners(
-            new Rect(0, 0, 1, 1),
-            cameraRenderer.camera.farClipPlane,
-            cameraRenderer.camera.stereoActiveEye,
-            _frustumCorners
-        );
-        
-        var fov = cameraRenderer.camera.fieldOfView;
-        var near = cameraRenderer.camera.nearClipPlane;
-        var far = cameraRenderer.camera.farClipPlane;
         var aspect = cameraRenderer.camera.aspect;
+        var far = cameraRenderer.camera.farClipPlane;
+        var right = cameraRenderer.camera.transform.right;
+        var up = cameraRenderer.camera.transform.up;
+        var forward = cameraRenderer.camera.transform.forward;
+        var halfFovTan = Mathf.Tan(cameraRenderer.camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
+ 
+        //计算相机在远裁剪面处的xyz三方向向量
+        var rightVec = right * far * halfFovTan * aspect;
+        var upVec = up * far * halfFovTan;
+        var forwardVec = forward * far;
+ 
+        //构建四个角的方向向量
+        var topLeft = (forwardVec - rightVec + upVec);
+        var topRight = (forwardVec + rightVec + upVec);
+        var bottomLeft = (forwardVec - rightVec - upVec);
+        var bottomRight = (forwardVec + rightVec - upVec);
 
-        var halfHeight = far * Mathf.Tan(fov / 2 * Mathf.Deg2Rad);
-        var toRight = cameraRenderer.camera.transform.right * halfHeight * aspect;
-        var toTop = cameraRenderer.camera.transform.up * halfHeight;
-        var toForward = cameraRenderer.camera.transform.forward * far;
-
-        _vectorArray[0] = toForward + toTop - toRight;
-        _vectorArray[1] = toForward + toTop + toRight;
-        _vectorArray[2] = toForward - toTop - toRight;
-        _vectorArray[3] = toForward - toTop + toRight;
-        _material.SetVectorArray(GFrustumCorners, _vectorArray);
+        var viewPortRay = Matrix4x4.identity;
+        viewPortRay.SetRow(0, topLeft);
+        viewPortRay.SetRow(1, topRight);
+        viewPortRay.SetRow(2, bottomLeft);
+        viewPortRay.SetRow(3, bottomRight);
+        
+        _material.SetMatrix(GViewPortRay, viewPortRay);
         
         CommandBuffer cmd = new CommandBuffer();
         cmd.name = "LightingPass";
@@ -73,21 +63,4 @@ public class LightingPass {
         cameraRenderer.ExecuteAndClearCmd(cmd);
         context.Submit();
     }
-    
-    public void ExecuteComputeShader(CameraRenderer cameraRenderer, ScriptableRenderContext context) {
-        _shader.SetTexture(_kernelIndex, "gBuffer0", cameraRenderer.gBufferMaps[0]);
-        _shader.SetTexture(_kernelIndex, "gBuffer1", cameraRenderer.gBufferMaps[1]);
-        _shader.SetTexture(_kernelIndex, "gBuffer2", cameraRenderer.gBufferMaps[2]);
-        _shader.SetTexture(_kernelIndex, "gDepthMap", cameraRenderer.depthMap);
-        _shader.SetTexture(_kernelIndex, "gOutputMap", cameraRenderer.screenMap);
-        int dx = MathUtility.DivideByMultiple(cameraRenderer.width,kGroupThreadX);
-        int dy = MathUtility.DivideByMultiple(cameraRenderer.height, kGroupThreadY);
-
-        CommandBuffer cmd = new CommandBuffer();
-        cmd.name = "LightingPass";
-        cmd.DispatchCompute(_shader, _kernelIndex, dx, dy, 1);
-        context.ExecuteCommandBuffer(cmd);
-        context.Submit();
-    }
-    
 }
