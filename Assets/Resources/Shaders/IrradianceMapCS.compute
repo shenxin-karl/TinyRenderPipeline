@@ -1,5 +1,6 @@
 // Each #kernel tells which function to compile; you can have many kernels
 #pragma kernel CSMain
+#pragma kernel DebugDirection
 #pragma enable_d3d11_debug_symbols
 // Create a RenderTexture with enableRandomWrite flag and set it
 // with cs.SetTexture
@@ -34,8 +35,8 @@ const static float3x3 gRotateCubeFace[6] = {
 };
 
 float3 GetDirection(ComputeIn cin) {
-    float2 dir = (cin.DispatchThreadID.xy + 0.5) * gResolution.zw;
-    float3 direction = normalize(mul(gRotateCubeFace[(uint)gCubeMapIndex], float3(dir, 0.5))); 
+    float3 dir = float3( cin.DispatchThreadID.xy * gResolution.zw - 0.5f, 0.5f);
+    float3 direction = normalize(mul(gRotateCubeFace[gCubeMapIndex], dir)); 
     return direction;
 }
 
@@ -63,6 +64,8 @@ float3 CalcIrradiance(float3 direction) {
             ++sampleCount;
         }
     }
+
+    return (N * 0.5 + 0.5);
     return ((PI / sampleCount) * irradianceSum);
 }
 
@@ -100,7 +103,7 @@ SH3 CalcSH(ComputeIn cin, float3 dir, float3 irradiance) {
 }
 
 void SHAccumulate(inout SH3 lhs, in SH3 rhs) {
-    [unroll] for (int i = 0; i < 9; ++i)
+    [unroll] for (uint i = 0; i < 9; ++i)
         lhs.m[i] += rhs.m[i];
 }
 
@@ -142,4 +145,13 @@ void CSMain (ComputeIn cin) {
     float3 irradiance = CalcIrradiance(direction);
     SH3 sh = CalcSH(cin, direction, irradiance);
     StoreSH(cin, sh);
+}
+
+RWStructuredBuffer<float3> gOutputDirection;
+[numthreads(NUM_THREAD, NUM_THREAD, 1)]
+void DebugDirection(ComputeIn cin) {
+    float3 direction = GetDirection(cin);
+    const uint start = 32 * 32 * (uint)gCubeMapIndex;
+    const uint offset = (cin.GroupID.y * 4 + cin.GroupID.x) * 64 + cin.GroupIndex;
+    gOutputDirection[start + offset] = direction;
 }

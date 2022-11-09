@@ -22,11 +22,6 @@ public class LightingPass : IPass {
     }
 
     public override void Init(ScriptableRenderContext context) {
-        _material.SetTexture(GBuffer0, _cameraRenderer.gBufferMaps[0]);
-        _material.SetTexture(GBuffer1, _cameraRenderer.gBufferMaps[1]);
-        _material.SetTexture(GBuffer2, _cameraRenderer.gBufferMaps[2]);
-        _material.SetTexture(GDepthMap, _cameraRenderer.depthMap);
-
         if (_cameraRenderer.pipeline.generateIbl != null) {
             var diffuseSHCoefs = _cameraRenderer.pipeline.generateIbl.DiffuseSH3.toVector4Array();
             _material.SetVectorArray("gAmbientDiffuseSH", diffuseSHCoefs);
@@ -34,16 +29,16 @@ public class LightingPass : IPass {
     }
     
     public void Execute(ScriptableRenderContext context) {
-        ExecuteGraphicsShader(_cameraRenderer, context);
-    }
-    
-    public void ExecuteGraphicsShader(CameraRenderer cameraRenderer, ScriptableRenderContext context) {
-        _material.SetMatrix(GMatInvViewProj, cameraRenderer.matInvViewProj);
+        _material.SetTexture(GBuffer0, _cameraRenderer.gBufferMaps[0]);
+        _material.SetTexture(GBuffer1, _cameraRenderer.gBufferMaps[1]);
+        _material.SetTexture(GBuffer2, _cameraRenderer.gBufferMaps[2]);
+        _material.SetTexture(GDepthMap, _cameraRenderer.depthMap);
+        _material.SetMatrix(GMatInvViewProj, _cameraRenderer.matInvViewProj);
         
         CommandBuffer cmd = new CommandBuffer();
         cmd.name = "LightingPass";
-        cmd.Blit(BuiltinRenderTextureType.None, cameraRenderer.screenMap, _material);
-        cameraRenderer.ExecuteAndClearCmd(cmd);
+        cmd.Blit(BuiltinRenderTextureType.None, _cameraRenderer.screenMap, _material);
+        _cameraRenderer.ExecuteAndClearCmd(cmd);
         context.Submit();
     }
 }

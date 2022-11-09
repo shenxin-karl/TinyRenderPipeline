@@ -63,6 +63,7 @@ Shader "Unlit/LightingPassPS"
             
             float4 frag(VertexOut pin) : SV_Target {
                 float3 N = GetNormal(pin);
+                
                 float3 albedo = GetAlbedo(pin);
                 float3 worldPos = GetWorldPosition(pin);
                

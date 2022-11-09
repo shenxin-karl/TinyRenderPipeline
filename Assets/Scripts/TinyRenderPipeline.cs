@@ -28,12 +28,14 @@ public class TinyRenderPipeline : RenderPipeline {
         foreach (Camera c in cameras) {
             _cameraRenderers.TryGetValue(c.name, out var cameraRenderer);
             if (cameraRenderer == null) {
-                cameraRenderer = new CameraRenderer(this, c);
+                cameraRenderer = new CameraRenderer(this);
                 cameraRenderer.Init(context);
                 _cameraRenderers.Add(c.name, cameraRenderer);
             }
-            cameraRenderer.Render(context);
+            cameraRenderer.Render(context, c);
         }
+        
+        generateIbl.DebugDirection();
     }
 
     private void TryInit(ScriptableRenderContext context) {

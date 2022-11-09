@@ -27,9 +27,8 @@ public class CameraRenderer {
 
     public Matrix4x4 matInvViewProj;
 
-    public CameraRenderer(TinyRenderPipeline pipeline, Camera camera) {
+    public CameraRenderer(TinyRenderPipeline pipeline) {
         this.pipeline = pipeline;
-        this.camera = camera;
         _passes = new List<IPass>();
         _lightingPass = new LightingPass(this);
         _passes.Add(_lightingPass);
@@ -78,8 +77,8 @@ public class CameraRenderer {
             pass.Resize(context, width, height);
     }
 
-    public void Render(ScriptableRenderContext context) {
-        SetupRender(context);
+    public void Render(ScriptableRenderContext context, Camera c) {
+        SetupRender(context, c);
         GeometryPass();
         LightingPass();
         DrawSkyBox();
@@ -91,9 +90,10 @@ public class CameraRenderer {
         cmd.Clear();
     }
     
-    private void SetupRender(ScriptableRenderContext context) {
+    private void SetupRender(ScriptableRenderContext context, Camera c) {
         _context = context;
-
+        camera = c;
+        
         Matrix4x4 matProj = GL.GetGPUProjectionMatrix(camera.projectionMatrix, false);
         Matrix4x4 vpMatrix = matProj * camera.worldToCameraMatrix;
         matInvViewProj = vpMatrix.inverse;

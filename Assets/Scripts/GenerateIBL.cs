@@ -2,8 +2,14 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Net.NetworkInformation;
+using System.Numerics;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
+using Random = UnityEngine.Random;
+using Vector2 = UnityEngine.Vector2;
+using Vector3 = UnityEngine.Vector3;
+using Vector4 = UnityEngine.Vector4;
 
 public class SH3 {
     public static readonly int kSH3Byte = sizeof(float) * 3 * 9;
@@ -51,6 +57,8 @@ public class GenerateIBL  {
     public Cubemap SpecularMap => _specularMap;
     public bool    IsInit      => _isInit;
 
+    public RenderTexture IrradianceMap;
+    
     public static readonly int kThreadX = 8;
     public static readonly int kThreadY = 8;
     
@@ -60,10 +68,20 @@ public class GenerateIBL  {
             throw new System.NullReferenceException("GenerateIBL constructor cubemap is null"); 
         _skyboxMap = cubemap;
         _generateSHShader = Resources.Load<ComputeShader>("Shaders/IrradianceMapCS");
+
+        IrradianceMap = new RenderTexture(32, 32, 0, GraphicsFormat.R16G16B16A16_SFloat);
+        IrradianceMap.enableRandomWrite = true;
+        IrradianceMap.dimension = TextureDimension.Cube;
+        IrradianceMap.Create();
     }
 
+    ~GenerateIBL() {
+        IrradianceMap.Release();
+    }
+    
     public void Generate(ScriptableRenderContext context) {
         GenerateDiffuseSH(context);
+        // DebugDirection();
     }
 
     private void GenerateDiffuseSH(ScriptableRenderContext context) {
@@ -95,10 +113,60 @@ public class GenerateIBL  {
         output.GetData(data);
 
         _diffuseSH3 = new SH3();
-        for (int i = 0; i < SH3.kVector3Count; ++i)
-            _diffuseSH3[i] = new Vector3(0f, 0f, 0f);
-        
         for (int i = 0; i < data.Length; ++i)
             _diffuseSH3[i % SH3.kVector3Count] += data[i];
+    }
+
+    public void DebugDirection() {
+        return;
+        int kernelIndex = _generateSHShader.FindKernel("DebugDirection");
+
+        const int kDiffuseMapResolution = 32;
+        Vector4 skyboxResolution = new Vector4(
+            kDiffuseMapResolution, 
+            kDiffuseMapResolution, 
+            1f / kDiffuseMapResolution, 
+            1f / kDiffuseMapResolution
+        );
+        
+        int blockX = MathUtility.DivideByMultiple(kDiffuseMapResolution, kThreadX);
+        int blockY = MathUtility.DivideByMultiple(kDiffuseMapResolution, kThreadY);
+
+        ComputeBuffer outputDirection = new ComputeBuffer(32 * 32 * 6, sizeof(float) * 3);
+        _generateSHShader.SetBuffer(kernelIndex, "gOutputDirection", outputDirection);
+        _generateSHShader.SetVector("gResolution", skyboxResolution);
+        _generateSHShader.SetVector("gFaceNumBlock", new Vector2(blockX, blockY));
+
+        for (int i = 0; i < 6; ++i) {
+            _generateSHShader.SetFloat("gCubeMapIndex", i);
+            _generateSHShader.Dispatch(kernelIndex, blockX, blockY, 1);
+        }
+
+        Vector3[] data = new Vector3[32 * 32 * 6];
+        outputDirection.GetData(data);
+        
+        _diffuseSH3 = new SH3();
+        Vector3 half = new Vector3(0.5f, 0.5f, 0.5f);
+        for (int i = 0; i < data.Length; ++i) {
+            Vector3 N = data[i];
+            float x = N.x;
+            float y = N.y;
+            float z = N.z;
+            Vector3 irradiance = N * 0.5f + half;
+            for (int j = 0; j < 9; ++j) {
+                _diffuseSH3[0] += irradiance * 0.2820948f;							            // y0p0
+                _diffuseSH3[1] += irradiance * 0.4886025f * y;						            // y1n1
+                _diffuseSH3[2] += irradiance * 0.4886025f * z;						            // y1p0
+                _diffuseSH3[3] += irradiance * 0.4886025f * x;						            // y1p1
+                _diffuseSH3[4] += irradiance * 1.0925480f * x * y;					            // y2n2
+                _diffuseSH3[5] += irradiance * 1.0925480f * y * z;					            // y2n1
+                _diffuseSH3[6] += irradiance * 0.3153916f * ((3f * z * z) - 1f);	            // y2p0
+                _diffuseSH3[7] += irradiance * 1.0925480f * x * z;					            // y2p1
+                _diffuseSH3[8] += irradiance * 0.5462742f * (x * x - y * y);		            // y2p2
+            }
+        }
+        for (int i = 0; i < 9; ++i) {
+            _diffuseSH3[i] /= data.Length;
+        }
     }
 };
