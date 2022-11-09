@@ -64,8 +64,6 @@ float3 CalcIrradiance(float3 direction) {
             ++sampleCount;
         }
     }
-
-    return (N * 0.5 + 0.5);
     return ((PI / sampleCount) * irradianceSum);
 }
 

@@ -1,12 +1,12 @@
 #ifndef __AMBIENT_LIGHTING_H__
 #define __AMBIENT_LIGHTING_H__
+#include "CookTorrance.cginc"
 
 #define SH3_NUM_VECTOR 9
 
 struct SH3 {
     float4 coefs[SH3_NUM_VECTOR]; 
 };
-
 
 float3 AmbientDiffuse(float4 coefs[SH3_NUM_VECTOR], float3 N) {
     float x = N.x;
@@ -26,6 +26,21 @@ float3 AmbientDiffuse(float4 coefs[SH3_NUM_VECTOR], float3 N) {
     result += coefs[7] * 1.0925480 * x * z;
     result += coefs[8] * 0.5462742 * (x*x - y*y);
     return result;
+}
+
+float3 FresnelSchlickRoughness(float cosTheta, MaterialData materialData) {
+    float3 F0 = materialData.fresnelFactor;
+    float roughness = materialData.roughness;
+    float invCos = 1.0 - cosTheta;
+    return F0 + (max(1.0 - roughness, F0) - F0) * (invCos * invCos * invCos * invCos * invCos);
+}
+
+float AmbientIBL(float3 N, float3 V, float4 coefs[SH3_NUM_VECTOR], MaterialData materialData) {
+    float3 Ks = FresnelSchlickRoughness(max(dot(N, V), 0.0), materialData);
+    float3 Kd = 1.0 - Ks;
+    float3 irradiance = AmbientDiffuse(coefs, N);
+    float3 diffuse = Kd * irradiance * materialData.diffuseAlbedo;
+    return irradiance;
 }
 
 #endif

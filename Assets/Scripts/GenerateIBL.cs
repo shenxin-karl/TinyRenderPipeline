@@ -118,7 +118,6 @@ public class GenerateIBL  {
     }
 
     public void DebugDirection() {
-        return;
         int kernelIndex = _generateSHShader.FindKernel("DebugDirection");
 
         const int kDiffuseMapResolution = 32;

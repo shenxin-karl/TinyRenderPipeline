@@ -34,8 +34,7 @@ public class TinyRenderPipeline : RenderPipeline {
             }
             cameraRenderer.Render(context, c);
         }
-        
-        generateIbl.DebugDirection();
+        // generateIbl.DebugDirection();
     }
 
     private void TryInit(ScriptableRenderContext context) {

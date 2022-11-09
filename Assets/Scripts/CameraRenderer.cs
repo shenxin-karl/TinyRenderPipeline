@@ -82,6 +82,13 @@ public class CameraRenderer {
         GeometryPass();
         LightingPass();
         DrawSkyBox();
+        
+        bool isEditor = Handles.ShouldRenderGizmos();
+        if (isEditor) {
+            context.DrawGizmos(camera, GizmoSubset.PreImageEffects);
+            context.DrawGizmos(camera, GizmoSubset.PostImageEffects);
+        }
+        
         Blit();
     }
 

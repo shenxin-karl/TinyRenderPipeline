@@ -80,12 +80,10 @@ Shader "Unlit/LightingPassPS"
                 float3 V = normalize(UnityWorldSpaceViewDir(worldPos));
                 float3 radiance = ComputeDirectionLight(light, materialData, N, V);
                 
-                float3 r = AmbientDiffuse(gAmbientDiffuseSH, N); 
-                return float4(r, 1.0);
-
-                    
+                float3 ambient = AmbientIBL(N, V, gAmbientDiffuseSH, materialData);
+                radiance += ambient;
+                
                 return float4(radiance, 1.0);
-
             }
             ENDCG
         }
