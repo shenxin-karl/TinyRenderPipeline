@@ -16,16 +16,13 @@ public class LightingPass : IPass {
 
     private static readonly int GMatInvViewProj = Shader.PropertyToID("gMatInvViewProj");
     private static readonly int GViewPortRay = Shader.PropertyToID("gViewPortRay");
-    
+    private static readonly int GAmbientDiffuseSH = Shader.PropertyToID("gAmbientDiffuseSH");
+
     public LightingPass(CameraRenderer cameraRenderer) : base(cameraRenderer) {
-        _material = new Material(Resources.Load<Shader>("Shaders/LightingPassPS"));
+        _material = new Material(Shader.Find("Unlit/LightingPassPS"));
     }
 
     public override void Init(ScriptableRenderContext context) {
-        if (_cameraRenderer.pipeline.generateIbl != null) {
-            var diffuseSHCoefs = _cameraRenderer.pipeline.generateIbl.DiffuseSH3.toVector4Array();
-            _material.SetVectorArray("gAmbientDiffuseSH", diffuseSHCoefs);
-        }
     }
     
     public void Execute(ScriptableRenderContext context) {
@@ -34,6 +31,10 @@ public class LightingPass : IPass {
         _material.SetTexture(GBuffer2, _cameraRenderer.gBufferMaps[2]);
         _material.SetTexture(GDepthMap, _cameraRenderer.depthMap);
         _material.SetMatrix(GMatInvViewProj, _cameraRenderer.matInvViewProj);
+        
+        if (_cameraRenderer.pipeline.generateIbl != null)
+            _material.SetVectorArray(GAmbientDiffuseSH, _cameraRenderer.pipeline.generateIbl.DiffuseSHVectors);
+        
         
         CommandBuffer cmd = new CommandBuffer();
         cmd.name = "LightingPass";

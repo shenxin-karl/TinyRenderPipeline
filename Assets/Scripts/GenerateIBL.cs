@@ -46,17 +46,19 @@ public class SH3 {
 };
 
 public class GenerateIBL  {
-    private Cubemap _skyboxMap;
-    private SH3     _diffuseSH3;
-    private Cubemap _specularMap;
-    private bool    _isInit = false;
+    private Cubemap   _skyboxMap;
+    private SH3       _diffuseSH3;
+    private Vector4[] _diffuseSHVectors;
+    private Cubemap   _specularMap;
+    private bool      _isInit = false;
 
     private ComputeShader _generateSHShader;
     
     public SH3     DiffuseSH3  => _diffuseSH3;
     public Cubemap SpecularMap => _specularMap;
     public bool    IsInit      => _isInit;
-
+    public Vector4[] DiffuseSHVectors => _diffuseSHVectors;
+    
     public RenderTexture IrradianceMap;
     
     public static readonly int kThreadX = 8;
@@ -111,10 +113,15 @@ public class GenerateIBL  {
 
         Vector3[] data = new Vector3[output.count * SH3.kVector3Count];
         output.GetData(data);
+        output.Release();
 
         _diffuseSH3 = new SH3();
         for (int i = 0; i < data.Length; ++i)
             _diffuseSH3[i % SH3.kVector3Count] += data[i];
+
+        _diffuseSHVectors = new Vector4[SH3.kVector3Count];
+        for (int i = 0; i < SH3.kVector3Count; ++i)
+            _diffuseSHVectors[i] = _diffuseSH3[i];
     }
 
     public void DebugDirection() {
@@ -143,6 +150,7 @@ public class GenerateIBL  {
 
         Vector3[] data = new Vector3[32 * 32 * 6];
         outputDirection.GetData(data);
+        outputDirection.Release();
         
         _diffuseSH3 = new SH3();
         Vector3 half = new Vector3(0.5f, 0.5f, 0.5f);
@@ -167,5 +175,7 @@ public class GenerateIBL  {
         for (int i = 0; i < 9; ++i) {
             _diffuseSH3[i] /= data.Length;
         }
+        
+        
     }
 };

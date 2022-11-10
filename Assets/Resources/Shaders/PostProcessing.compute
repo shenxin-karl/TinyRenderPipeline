@@ -1,0 +1,84 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+#include <HLSLSupport.cginc>
+
+struct ComputeIn {
+    uint3 GroupID           : SV_GroupID;           
+    uint3 GroupThreadID     : SV_GroupThreadID;     
+    uint3 DispatchThreadID  : SV_DispatchThreadID;  
+    uint  GroupIndex        : SV_GroupIndex;       
+};
+
+#define ENABLE_ACES_TONE        (1 << 0)
+#define ENABLE_GAMMA_CORRECTION (1 << 1)
+#define ENABLE_COLOR_LUT        (1 << 2)
+
+uint gFeatureFlag;
+sampler2D gColorLutMap;
+RWTexture2D<float4> gScreenMap;
+
+bool IsEnableAcesTone()         { return gFeatureFlag & ENABLE_ACES_TONE; }
+bool IsEnableGammaCorrection()  { return  gFeatureFlag & ENABLE_GAMMA_CORRECTION; }
+bool IsEnableColorLut()         { return gFeatureFlag & ENABLE_COLOR_LUT; } 
+
+float3 ACESToneMapping(float3 color, float adaptedLum) {
+    const float A = 2.51f;
+    const float B = 0.03f;
+    const float C = 2.43f;
+    const float D = 0.59f; 
+    const float E = 0.14f;
+    color *= adaptedLum;
+    return (color * (A * color + B)) / (color * (C * color + D) + E);
+}
+
+float3 GammaCorrection(float3 color) {
+    const float invGamma = 1.f / 2.2;
+    return pow(abs(color), float3(invGamma, invGamma, invGamma));
+}
+
+// 每个 lut 都是 256x16 内部有 16 个 16x16 的块.
+// 从左到的块, 由 b 通道决定. 块内 u 坐标由 r 通道决定
+// 块内 v 坐标由 g 通道决定. 
+// floor(c * 15.0) / 15.0 向下取整到 0~15 之间
+// 240是最后一块的起始位置, 最后除以 256 归一化到 0~1
+#define S_NORMALIZE_FACTOR (1.0 / 255.0)
+#define T_NORMALIZE_FACTOR (1.0 / 15.0)
+float FloorPixel(float c) {
+    return floor(c * 15.0) * (1.0 / 15.0) * 15.0;
+}
+float FloorBlock(float b) {
+    return floor(b * 15.0) * (1.0 / 15.0) * 240.0;
+}
+float CeilPixel(float c) {
+    return ceil(c * 15.0) * (1.0 / 15.0) * 15.0;
+}
+float CeilBlock(float b) {
+    return ceil(b * 15.0) * (1.0 / 15.0) * 240.0;
+}
+
+float3 ColorLut(float3 color) {
+    float u0 = (FloorBlock(color.b) + FloorPixel(color.r)) * S_NORMALIZE_FACTOR;
+    float v0 = FloorPixel(color.g) * T_NORMALIZE_FACTOR;
+    float3 left = tex2Dlod(gColorLutMap, float4(u0, v0, 0, 0)).rgb;
+    
+    float u1 = (CeilBlock(color.b) + CeilPixel(color.r)) * S_NORMALIZE_FACTOR;
+    float v1 = CeilPixel(color.g) * T_NORMALIZE_FACTOR;
+    float3 right = tex2Dlod(gColorLutMap, float4(u1, v1, 0, 0)).rgb;
+    
+    color = lerp(left, right, frac(color * 15.0));
+    return color;
+}
+
+[numthreads(8,8,1)]
+void CSMain (ComputeIn cin) {
+    float4 color = gScreenMap[cin.DispatchThreadID.xy];
+
+    UNITY_BRANCH if (IsEnableAcesTone())
+        color.xyz = ACESToneMapping(color.xyz, 1.0);
+    UNITY_BRANCH if (IsEnableGammaCorrection())
+        color.xyz = GammaCorrection(color.xyz);
+    UNITY_BRANCH if (IsEnableColorLut())
+        color.xyz = ColorLut(color.xyz);
+    
+    gScreenMap[cin.DispatchThreadID.xy] = color;
+}

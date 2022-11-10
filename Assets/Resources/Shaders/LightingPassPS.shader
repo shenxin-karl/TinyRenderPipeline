@@ -8,6 +8,7 @@ Shader "Unlit/LightingPassPS"
         ZWrite Off
         Pass
         {
+            Name "LightingPass"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
@@ -32,8 +33,7 @@ Shader "Unlit/LightingPassPS"
             sampler2D gBuffer2;
             sampler2D gDepthMap;
             float4x4  gMatInvViewProj;
-            float4    gAmbientDiffuseSH[SH3_NUM_VECTOR];
-            
+
             VertexOut vert(VertexIn vin) {
                 VertexOut vout;
                 vout.SVPosition = UnityObjectToClipPos(vin.pos);
@@ -80,7 +80,7 @@ Shader "Unlit/LightingPassPS"
                 float3 V = normalize(UnityWorldSpaceViewDir(worldPos));
                 float3 radiance = ComputeDirectionLight(light, materialData, N, V);
                 
-                float3 ambient = AmbientIBL(N, V, gAmbientDiffuseSH, materialData);
+                float3 ambient = AmbientIBL(N, V, materialData);
                 radiance += ambient;
                 
                 return float4(radiance, 1.0);
