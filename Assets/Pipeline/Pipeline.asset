@@ -12,5 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b990a9c31d0aac348857ed2b2441d9ab, type: 3}
   m_Name: Pipeline
   m_EditorClassIdentifier: 
-  skyboxCubeMap: {fileID: 8900000, guid: 7db77038279b6604aad86dfbd7a95003, type: 2}
-  brdfLutMap: {fileID: 0}
+  skyboxCubeMap: {fileID: 8900000, guid: d197844d98627cc4cae852c5bfcbaa07, type: 2}
+  brdfLutMap: {fileID: 2800000, guid: 009ce82a0fb01e3448c695c62e0ed943, type: 3}
+  colorLutMap: {fileID: 0}
+  enableAcesToneMapping: 1
+  enableGammaCorrection: 1

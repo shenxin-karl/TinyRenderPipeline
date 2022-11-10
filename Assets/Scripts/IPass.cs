@@ -14,4 +14,8 @@ public class IPass {
     }
     public virtual void Resize(ScriptableRenderContext context, int width, int height) {
     }
+
+    public virtual void ExecutePass(ScriptableRenderContext context) {
+        
+    }
 }

@@ -17,7 +17,7 @@ public class TinyRenderPipeline : RenderPipeline {
     public TinyRenderPipeline(TinyRenderPipelineAsset asset) {
         pipelineSettings = asset;
         _cameraRenderers = new Dictionary<string, CameraRenderer>();
-        
+
         if (pipelineSettings.skyboxCubeMap != null)
             generateIbl = new GenerateIBL(pipelineSettings.skyboxCubeMap);
     }
@@ -34,7 +34,6 @@ public class TinyRenderPipeline : RenderPipeline {
             }
             cameraRenderer.Render(context, c);
         }
-        // generateIbl.DebugDirection();
     }
 
     private void TryInit(ScriptableRenderContext context) {
@@ -42,6 +41,7 @@ public class TinyRenderPipeline : RenderPipeline {
             return;
 
         _isInit = true;
-        generateIbl.Generate(context);
+        if (pipelineSettings.skyboxCubeMap != null)
+            generateIbl.Generate(context);
     }
 }

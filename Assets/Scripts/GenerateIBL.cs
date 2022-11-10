@@ -68,6 +68,7 @@ public class GenerateIBL  {
     {
         if (cubemap == null)
             throw new System.NullReferenceException("GenerateIBL constructor cubemap is null"); 
+        
         _skyboxMap = cubemap;
         _generateSHShader = Resources.Load<ComputeShader>("Shaders/IrradianceMapCS");
 

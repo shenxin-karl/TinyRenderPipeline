@@ -10,6 +10,7 @@ public class CameraRenderer {
 
     private List<IPass> _passes;
     private LightingPass _lightingPass;
+    private PostProcessingPass _postProcessingPass;
 
     public TinyRenderPipeline pipeline;
     public Camera camera;
@@ -32,6 +33,9 @@ public class CameraRenderer {
         _passes = new List<IPass>();
         _lightingPass = new LightingPass(this);
         _passes.Add(_lightingPass);
+
+        _postProcessingPass = new PostProcessingPass(this);
+        _passes.Add(_postProcessingPass);
     }
 
     ~CameraRenderer() {
@@ -40,7 +44,8 @@ public class CameraRenderer {
 
     private void Clear() {
         RenderTexture.ReleaseTemporary(depthMap);
-        RenderTexture.ReleaseTemporary(screenMap);
+        if (screenMap != null)
+            screenMap.Release();
         RenderTexture.ReleaseTemporary(gBufferMaps[0]);
         RenderTexture.ReleaseTemporary(gBufferMaps[1]);
         RenderTexture.ReleaseTemporary(gBufferMaps[2]);
@@ -58,10 +63,14 @@ public class CameraRenderer {
         Clear();
         
         depthMap = RenderTexture.GetTemporary(width, height, 24, RenderTextureFormat.Depth, RenderTextureReadWrite.Linear);
-        screenMap = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
         gBufferMaps[0] = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
         gBufferMaps[1] = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
         gBufferMaps[2] = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+
+        screenMap = new RenderTexture(width, height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        screenMap.enableRandomWrite = true;
+        screenMap.Create();
+        
         for (int i = 0; i < kGBufferCount; ++i) {
             gBufferMaps[i].name = $"gBuffer{i}";  
             gBufferID[i] = gBufferMaps[i];
@@ -82,6 +91,7 @@ public class CameraRenderer {
         GeometryPass();
         LightingPass();
         DrawSkyBox();
+        PostProcessingPass();
         
         bool isEditor = Handles.ShouldRenderGizmos();
         if (isEditor) {
@@ -133,7 +143,11 @@ public class CameraRenderer {
     }
 
     private void LightingPass() {
-        _lightingPass.Execute(_context);
+        _lightingPass.ExecutePass(_context);
+    }
+
+    private void PostProcessingPass() {
+        _postProcessingPass.ExecutePass(_context);
     }
 
     private void DrawSkyBox() {

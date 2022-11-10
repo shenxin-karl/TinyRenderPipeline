@@ -25,7 +25,7 @@ public class LightingPass : IPass {
     public override void Init(ScriptableRenderContext context) {
     }
     
-    public void Execute(ScriptableRenderContext context) {
+    public override void ExecutePass(ScriptableRenderContext context) {
         _material.SetTexture(GBuffer0, _cameraRenderer.gBufferMaps[0]);
         _material.SetTexture(GBuffer1, _cameraRenderer.gBufferMaps[1]);
         _material.SetTexture(GBuffer2, _cameraRenderer.gBufferMaps[2]);

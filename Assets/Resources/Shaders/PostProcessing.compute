@@ -1,5 +1,7 @@
 // Each #kernel tells which function to compile; you can have many kernels
 #pragma kernel CSMain
+#pragma enable_d3d11_debug_symbols
+
 #include <HLSLSupport.cginc>
 
 struct ComputeIn {
@@ -13,12 +15,12 @@ struct ComputeIn {
 #define ENABLE_GAMMA_CORRECTION (1 << 1)
 #define ENABLE_COLOR_LUT        (1 << 2)
 
-uint gFeatureFlag;
+int gFeatureFlag;
 sampler2D gColorLutMap;
 RWTexture2D<float4> gScreenMap;
 
 bool IsEnableAcesTone()         { return gFeatureFlag & ENABLE_ACES_TONE; }
-bool IsEnableGammaCorrection()  { return  gFeatureFlag & ENABLE_GAMMA_CORRECTION; }
+bool IsEnableGammaCorrection()  { return gFeatureFlag & ENABLE_GAMMA_CORRECTION; }
 bool IsEnableColorLut()         { return gFeatureFlag & ENABLE_COLOR_LUT; } 
 
 float3 ACESToneMapping(float3 color, float adaptedLum) {
@@ -65,8 +67,9 @@ float3 ColorLut(float3 color) {
     float v1 = CeilPixel(color.g) * T_NORMALIZE_FACTOR;
     float3 right = tex2Dlod(gColorLutMap, float4(u1, v1, 0, 0)).rgb;
     
-    color = lerp(left, right, frac(color * 15.0));
-    return color;
+    // color = lerp(left, right, frac(color * 15.0));
+    // return color;
+    return left;
 }
 
 [numthreads(8,8,1)]
