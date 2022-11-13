@@ -1,11 +1,13 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Data.Common;
 using System.Net.NetworkInformation;
 using System.Numerics;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
+using Matrix4x4 = UnityEngine.Matrix4x4;
 using Random = UnityEngine.Random;
 using Vector2 = UnityEngine.Vector2;
 using Vector3 = UnityEngine.Vector3;
@@ -46,13 +48,14 @@ public class SH3 {
 };
 
 public class GenerateIBL  {
-    private Cubemap   _skyboxMap;
+    private Texture   _panoramaMap;
+    private Texture   _environmentMap;
     private SH3       _diffuseSH3;
     private Vector4[] _diffuseSHVectors;
     private Cubemap   _specularMap;
     private bool      _isInit = false;
-
-    private ComputeShader _generateSHShader;
+    private RenderTexture _cubeMapRenderTexture;
+    
     
     public SH3     DiffuseSH3  => _diffuseSH3;
     public Cubemap SpecularMap => _specularMap;
@@ -64,13 +67,16 @@ public class GenerateIBL  {
     public static readonly int kThreadX = 8;
     public static readonly int kThreadY = 8;
     
-    public GenerateIBL(Cubemap cubemap)
-    {
-        if (cubemap == null)
-            throw new System.NullReferenceException("GenerateIBL constructor cubemap is null"); 
-        
-        _skyboxMap = cubemap;
-        _generateSHShader = Resources.Load<ComputeShader>("Shaders/IrradianceMapCS");
+    public GenerateIBL(Texture skybox) {
+        if (skybox == null)
+            throw new System.NullReferenceException("GenerateIBL constructor cubemap is null");
+
+        if (skybox.dimension == TextureDimension.Cube)
+            _environmentMap = (Cubemap)skybox;
+        else if (skybox.dimension == TextureDimension.Tex2D)
+            _panoramaMap = skybox;
+        else
+            throw new System.ArgumentException("invalid skybox dimension");
 
         IrradianceMap = new RenderTexture(32, 32, 0, GraphicsFormat.R16G16B16A16_SFloat);
         IrradianceMap.enableRandomWrite = true;
@@ -80,15 +86,59 @@ public class GenerateIBL  {
 
     ~GenerateIBL() {
         IrradianceMap.Release();
+        if (_cubeMapRenderTexture != null)
+            _cubeMapRenderTexture.Release();
     }
     
     public void Generate(ScriptableRenderContext context) {
+        // GenerateEnvironmentMap(context);
         GenerateDiffuseSH(context);
-        // DebugDirection();
     }
 
+    public void GenerateEnvironmentMap(ScriptableRenderContext context) {
+        // if (_environmentMap != null)
+        //     return;
+        
+        if (_cubeMapRenderTexture != null)
+            _cubeMapRenderTexture.Release();
+
+        _cubeMapRenderTexture = new RenderTexture(
+            512, 
+            512, 
+            0, 
+            GraphicsFormat.R16G16B16A16_SFloat
+        ) {
+            dimension = TextureDimension.Tex2DArray | TextureDimension.Cube,
+            volumeDepth = 6,
+            enableRandomWrite = true,
+            wrapMode = TextureWrapMode.Clamp,
+            filterMode = FilterMode.Trilinear
+        };
+        _cubeMapRenderTexture.Create();
+        
+        ComputeShader shader = Resources.Load<ComputeShader>("Shaders/PanoramaToCube");
+        int kernelIndex = shader.FindKernel("CSMain");
+        shader.SetTexture(kernelIndex, "gPanoramaMap" ,_panoramaMap);
+        shader.SetTexture(kernelIndex, "gResult", _cubeMapRenderTexture);
+        shader.GetKernelThreadGroupSizes(kernelIndex, out uint groupX, out uint groupY, out uint groupZ);
+
+        int dx = MathUtility.DivideByMultiple(512, (int)groupX);
+        int dy = MathUtility.DivideByMultiple(512, (int)groupY);
+
+        CommandBuffer cmd = new CommandBuffer();
+        cmd.name = "GenerateEnvironmentMap";
+        cmd.DispatchCompute(shader, kernelIndex, dx, dy, 6);
+        context.ExecuteCommandBuffer(cmd);
+        context.Submit();
+        cmd.Release();
+
+        // _cubeMapRenderTexture;
+        _environmentMap = _cubeMapRenderTexture;
+    }
+    
     private void GenerateDiffuseSH(ScriptableRenderContext context) {
-        int kernelIndex = _generateSHShader.FindKernel("CSMain");
+        ComputeShader generateSHShader = Resources.Load<ComputeShader>("Shaders/IrradianceMapCS");
+        int kernelIndex = generateSHShader.FindKernel("CSMain");
 
         const int kDiffuseMapResolution = 32;
         Vector4 skyboxResolution = new Vector4(
@@ -102,14 +152,14 @@ public class GenerateIBL  {
         int blockY = MathUtility.DivideByMultiple(kDiffuseMapResolution, kThreadY);
 
         ComputeBuffer output = new ComputeBuffer(blockX * blockY * 6, SH3.kSH3Byte);
-        _generateSHShader.SetTexture(kernelIndex, "gEnvMap", _skyboxMap);
-        _generateSHShader.SetBuffer(kernelIndex, "gOutput", output);
-        _generateSHShader.SetVector("gResolution", skyboxResolution);
-        _generateSHShader.SetVector("gFaceNumBlock", new Vector2(blockX, blockY));
+        generateSHShader.SetTexture(kernelIndex, "gEnvMap", _environmentMap);
+        generateSHShader.SetBuffer(kernelIndex, "gOutput", output);
+        generateSHShader.SetVector("gResolution", skyboxResolution);
+        generateSHShader.SetVector("gFaceNumBlock", new Vector2(blockX, blockY));
 
         for (int i = 0; i < 6; ++i) {
-            _generateSHShader.SetFloat("gCubeMapIndex", i);
-            _generateSHShader.Dispatch( kernelIndex, blockX, blockY, 1);
+            generateSHShader.SetFloat("gCubeMapIndex", i);
+            generateSHShader.Dispatch( kernelIndex, blockX, blockY, 1);
         }
 
         Vector3[] data = new Vector3[output.count * SH3.kVector3Count];
@@ -126,7 +176,8 @@ public class GenerateIBL  {
     }
 
     public void DebugDirection() {
-        int kernelIndex = _generateSHShader.FindKernel("DebugDirection");
+        ComputeShader generateSHShader = Resources.Load<ComputeShader>("Shaders/IrradianceMapCS");
+        int kernelIndex = generateSHShader.FindKernel("CSMain");
 
         const int kDiffuseMapResolution = 32;
         Vector4 skyboxResolution = new Vector4(
@@ -140,13 +191,13 @@ public class GenerateIBL  {
         int blockY = MathUtility.DivideByMultiple(kDiffuseMapResolution, kThreadY);
 
         ComputeBuffer outputDirection = new ComputeBuffer(32 * 32 * 6, sizeof(float) * 3);
-        _generateSHShader.SetBuffer(kernelIndex, "gOutputDirection", outputDirection);
-        _generateSHShader.SetVector("gResolution", skyboxResolution);
-        _generateSHShader.SetVector("gFaceNumBlock", new Vector2(blockX, blockY));
+        generateSHShader.SetBuffer(kernelIndex, "gOutputDirection", outputDirection);
+        generateSHShader.SetVector("gResolution", skyboxResolution);
+        generateSHShader.SetVector("gFaceNumBlock", new Vector2(blockX, blockY));
 
         for (int i = 0; i < 6; ++i) {
-            _generateSHShader.SetFloat("gCubeMapIndex", i);
-            _generateSHShader.Dispatch(kernelIndex, blockX, blockY, 1);
+            generateSHShader.SetFloat("gCubeMapIndex", i);
+            generateSHShader.Dispatch(kernelIndex, blockX, blockY, 1);
         }
 
         Vector3[] data = new Vector3[32 * 32 * 6];
@@ -176,7 +227,5 @@ public class GenerateIBL  {
         for (int i = 0; i < 9; ++i) {
             _diffuseSH3[i] /= data.Length;
         }
-        
-        
     }
 };

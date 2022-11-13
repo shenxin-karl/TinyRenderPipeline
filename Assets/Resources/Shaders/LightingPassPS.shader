@@ -74,7 +74,6 @@ Shader "Unlit/LightingPassPS"
 
                 DirectionalLight light;
                 light.direction = normalize(UnityWorldSpaceLightDir(worldPos));
-                
                 light.radiance = _LightColor0.rgb;
 
                 float3 V = normalize(UnityWorldSpaceViewDir(worldPos));

@@ -13,7 +13,6 @@ public class TinyRenderPipeline : RenderPipeline {
     public GenerateIBL generateIbl;
     public TinyRenderPipelineAsset pipelineSettings;
 
-
     public TinyRenderPipeline(TinyRenderPipelineAsset asset) {
         pipelineSettings = asset;
         _cameraRenderers = new Dictionary<string, CameraRenderer>();

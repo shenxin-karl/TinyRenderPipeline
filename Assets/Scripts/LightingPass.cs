@@ -23,6 +23,22 @@ public class LightingPass : IPass {
     }
 
     public override void Init(ScriptableRenderContext context) {
+        var settings = _cameraRenderer.pipeline.pipelineSettings;
+
+        if (settings.brdfLutMap != null) {
+            _material.SetTexture("gBrdfLutMap", settings.brdfLutMap);
+            if (settings.irradianceMap != null) {
+                _material.EnableKeyword("_ENABLE_IBL_DIFFUSE");
+                _material.SetTexture("gIrradianceMap", settings.irradianceMap);
+            }
+
+            if (settings.prefilterMap != null) {
+                _material.EnableKeyword("_ENABLE_IBL_SPECULAR");
+                _material.SetTexture("gPrefilterMap", settings.prefilterMap);
+            }
+        }
+        
+            
     }
     
     public override void ExecutePass(ScriptableRenderContext context) {
@@ -34,7 +50,6 @@ public class LightingPass : IPass {
         
         if (_cameraRenderer.pipeline.generateIbl != null)
             _material.SetVectorArray(GAmbientDiffuseSH, _cameraRenderer.pipeline.generateIbl.DiffuseSHVectors);
-        
         
         CommandBuffer cmd = new CommandBuffer();
         cmd.name = "LightingPass";
