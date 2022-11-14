@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 
 public class CameraRenderer {
@@ -11,13 +12,14 @@ public class CameraRenderer {
     private List<IPass> _passes;
     private LightingPass _lightingPass;
     private PostProcessingPass _postProcessingPass;
+    private TemporalAAPass _temporalAAPass;
 
     public TinyRenderPipeline pipeline;
     public Camera camera;
     public int width = -1;
     public int height = -1;
 
-    private static readonly int kGBufferCount = 3;
+    private static readonly int kGBufferCount = 4;
     
     public RenderTexture depthMap;
     public RenderTexture[] gBufferMaps = new RenderTexture[kGBufferCount];
@@ -27,6 +29,8 @@ public class CameraRenderer {
     public RenderTargetIdentifier screenMapID;
 
     public Matrix4x4 matInvViewProj;
+    public Matrix4x4 currFrameWorldToViewport;
+    public Matrix4x4 prevFrameWorldToViewport;
 
     public CameraRenderer(TinyRenderPipeline pipeline) {
         this.pipeline = pipeline;
@@ -36,6 +40,9 @@ public class CameraRenderer {
 
         _postProcessingPass = new PostProcessingPass(this);
         _passes.Add(_postProcessingPass);
+
+        _temporalAAPass = new TemporalAAPass(this);
+        _passes.Add(_temporalAAPass);
     }
 
     ~CameraRenderer() {
@@ -66,7 +73,8 @@ public class CameraRenderer {
         gBufferMaps[0] = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
         gBufferMaps[1] = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
         gBufferMaps[2] = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
-
+        gBufferMaps[3] = RenderTexture.GetTemporary(width, height, 0, GraphicsFormat.A2B10G10R10_UNormPack32);
+        
         screenMap = new RenderTexture(width, height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
         screenMap.enableRandomWrite = true;
         screenMap.Create();
@@ -91,6 +99,7 @@ public class CameraRenderer {
         GeometryPass();
         LightingPass();
         DrawSkyBox();
+        TemporalAAPass();
         PostProcessingPass();
         
         bool isEditor = Handles.ShouldRenderGizmos();
@@ -111,21 +120,28 @@ public class CameraRenderer {
         _context = context;
         camera = c;
         
-        Matrix4x4 matProj = GL.GetGPUProjectionMatrix(camera.projectionMatrix, false);
-        Matrix4x4 vpMatrix = matProj * camera.worldToCameraMatrix;
-        matInvViewProj = vpMatrix.inverse;
-        
         if (width != camera.pixelWidth || height != camera.pixelHeight)
             Resize(context, camera.pixelWidth, camera.pixelHeight);
+        
+        Matrix4x4 matProj = GL.GetGPUProjectionMatrix(camera.projectionMatrix, false);
+        var worldToCameraMatrix = camera.worldToCameraMatrix;
+        Matrix4x4 vpMatrix = matProj * worldToCameraMatrix;
+        matInvViewProj = vpMatrix.inverse;
+
+        
+        prevFrameWorldToViewport = currFrameWorldToViewport;
+        currFrameWorldToViewport = matProj * worldToCameraMatrix;
     }
 
     private void GeometryPass() {
         CommandBuffer cmd = new CommandBuffer();
-        cmd.name = "GeometryPass";
-        
+        cmd.BeginSample("GeometryPass");
         _context.SetupCameraProperties(camera);
+        
+        Vector2 jitter = _temporalAAPass.Jitter;
         cmd.SetRenderTarget(gBufferID, depthMapID);
-        cmd.SetViewport(new Rect(0f, 0f, width, height));
+        cmd.SetViewport(new Rect(jitter.x, jitter.y, width, height));
+        
         cmd.ClearRenderTarget(true, true, Color.clear);
         ExecuteAndClearCmd(cmd);
 
@@ -137,6 +153,8 @@ public class CameraRenderer {
         DrawingSettings drawingSettings = new DrawingSettings(shaderTagId, sortingSettings);
         FilteringSettings filteringSettings = FilteringSettings.defaultValue;
         _context.DrawRenderers(cullingResults, ref drawingSettings, ref filteringSettings);
+        
+        cmd.EndSample("GeometryPass");
         ExecuteAndClearCmd(cmd);
 
         _context.Submit();
@@ -146,6 +164,10 @@ public class CameraRenderer {
         _lightingPass.ExecutePass(_context);
     }
 
+    private void TemporalAAPass() {
+        _temporalAAPass.ExecutePass(_context);
+    }
+    
     private void PostProcessingPass() {
         _postProcessingPass.ExecutePass(_context);
     }

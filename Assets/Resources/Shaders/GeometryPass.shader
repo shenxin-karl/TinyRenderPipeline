@@ -30,6 +30,7 @@ Shader "Unlit/GeometryPass"
             #pragma shader_feature _ _ENABLE_ROUGHNESS_TEX
             #pragma multi_compile  _ _ENABLE_ALPHA_TEST
             #include "UnityCG.cginc"
+            #include "PackedVelocity.cginc"
 
             #if defined(_ENABLE_ALBEDO_MAP) || defined(_ENABLE_NORMAL_MAP) || defined(_ENABLE_METALLIC_TEX) || defined(_ENABLE_ROUGHNESS_TEX)
                 #define NEED_UV 1
@@ -56,6 +57,8 @@ Shader "Unlit/GeometryPass"
                 #if NEED_TANGENT
                     float4 tangent    : TEXCOORD3;
                 #endif
+                float4 currFrameWorldPos    : TEXCOORD4;
+                float4 prevFrameWorldPos    : TEXCOORD5;   
             };
 
             sampler2D _MainTex;
@@ -80,7 +83,7 @@ Shader "Unlit/GeometryPass"
                     vout.tangent = float4(UnityObjectToWorldDir(vin.tangent.xyz), vin.tangent.w);
                 #endif
             }
-            
+
             VertexOut vert (VertexIn vin) {
                 VertexOut vout = (VertexOut)0;
                 vout.SVPosition = UnityObjectToClipPos(vin.pos);
@@ -94,6 +97,7 @@ Shader "Unlit/GeometryPass"
                 fixed4 gBuffer0 : SV_Target0;
                 fixed4 gBuffer1 : SV_Target1;
                 fixed4 gBuffer2 : SV_Target2;
+                packed_velocity_t velocityMap : SV_Target3;
             };
 
             float4 GetAlbedo(VertexOut pin) {
