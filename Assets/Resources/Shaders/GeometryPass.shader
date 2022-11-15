@@ -84,9 +84,11 @@ Shader "Unlit/GeometryPass"
                 #endif
             }
 
+            float4x4 gMatViewProj;
             VertexOut vert (VertexIn vin) {
                 VertexOut vout = (VertexOut)0;
-                vout.SVPosition = UnityObjectToClipPos(vin.pos);
+                float4 worldPos = mul(unity_ObjectToWorld, float4(vin.pos, 1.0));
+                vout.SVPosition = mul(UNITY_MATRIX_VP, worldPos);
                 vout.normal = UnityObjectToWorldNormal(vin.normal);
                 InitUV(vin, vout);
                 InitTangent(vin, vout);

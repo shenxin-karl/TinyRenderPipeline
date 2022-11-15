@@ -9,21 +9,17 @@ using UnityEngine.Rendering;
 
 public class TinyRenderPipeline : RenderPipeline {
     private Dictionary<string, CameraRenderer> _cameraRenderers;
-    private bool _isInit = false;
-    public GenerateIBL generateIbl;
     public TinyRenderPipelineAsset pipelineSettings;
 
     public TinyRenderPipeline(TinyRenderPipelineAsset asset) {
         pipelineSettings = asset;
         _cameraRenderers = new Dictionary<string, CameraRenderer>();
-
-        if (pipelineSettings.skyboxCubeMap != null)
-            generateIbl = new GenerateIBL(pipelineSettings.skyboxCubeMap);
+        Shader.SetGlobalTexture("gBrdfLutMap", pipelineSettings.brdfLutMap);
+        Shader.SetGlobalTexture("gIrradianceMap", pipelineSettings.irradianceMap);
+        Shader.SetGlobalTexture("gPrefilterMap", pipelineSettings.prefilterMap);
     }
     
     protected override void Render(ScriptableRenderContext context, Camera[] cameras) {
-        TryInit(context);
-        
         foreach (Camera c in cameras) {
             _cameraRenderers.TryGetValue(c.name, out var cameraRenderer);
             if (cameraRenderer == null) {
@@ -33,14 +29,5 @@ public class TinyRenderPipeline : RenderPipeline {
             }
             cameraRenderer.Render(context, c);
         }
-    }
-
-    private void TryInit(ScriptableRenderContext context) {
-        if (_isInit)
-            return;
-
-        _isInit = true;
-        if (pipelineSettings.skyboxCubeMap != null)
-            generateIbl.Generate(context);
     }
 }

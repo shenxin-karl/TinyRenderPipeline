@@ -103,7 +103,7 @@ public class CameraRenderer {
         PostProcessingPass();
         
         bool isEditor = Handles.ShouldRenderGizmos();
-        if (isEditor) {
+        if (isEditor && camera.cameraType == CameraType.SceneView) {
             context.DrawGizmos(camera, GizmoSubset.PreImageEffects);
             context.DrawGizmos(camera, GizmoSubset.PostImageEffects);
         }
@@ -119,18 +119,28 @@ public class CameraRenderer {
     private void SetupRender(ScriptableRenderContext context, Camera c) {
         _context = context;
         camera = c;
-        
         if (width != camera.pixelWidth || height != camera.pixelHeight)
             Resize(context, camera.pixelWidth, camera.pixelHeight);
         
-        Matrix4x4 matProj = GL.GetGPUProjectionMatrix(camera.projectionMatrix, false);
+        Matrix4x4 matProj = GL.GetGPUProjectionMatrix(camera.projectionMatrix, true);
         var worldToCameraMatrix = camera.worldToCameraMatrix;
         Matrix4x4 vpMatrix = matProj * worldToCameraMatrix;
         matInvViewProj = vpMatrix.inverse;
 
+        Matrix4x4 matViewProj = matProj * worldToCameraMatrix;
+
+        Vector3 half = new Vector3(0.5f, 0.5f, 0f);
+        Matrix4x4 toTextureSpace = Matrix4x4.Translate(half) * Matrix4x4.Scale(half);
+        Matrix4x4 toViewport = Matrix4x4.Scale(new Vector3(width, height, 1f));
+        Matrix4x4 clipToViewport = toViewport * toTextureSpace;
         
         prevFrameWorldToViewport = currFrameWorldToViewport;
-        currFrameWorldToViewport = matProj * worldToCameraMatrix;
+        currFrameWorldToViewport = clipToViewport * matProj * worldToCameraMatrix;
+        Shader.SetGlobalMatrix("gMatViewProj", matViewProj);
+        
+        if (camera.cameraType == CameraType.SceneView) {
+            ScriptableRenderContext.EmitWorldGeometryForSceneView(camera);
+        }
     }
 
     private void GeometryPass() {
@@ -140,7 +150,11 @@ public class CameraRenderer {
         
         Vector2 jitter = _temporalAAPass.Jitter;
         cmd.SetRenderTarget(gBufferID, depthMapID);
-        cmd.SetViewport(new Rect(jitter.x, jitter.y, width, height));
+        
+        if (camera.cameraType == CameraType.SceneView)
+            cmd.SetViewport(new Rect(jitter.x, jitter.y, width, height));
+        else 
+            cmd.SetViewport(new Rect(0, 0, width, height));
         
         cmd.ClearRenderTarget(true, true, Color.clear);
         ExecuteAndClearCmd(cmd);

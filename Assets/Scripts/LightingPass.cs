@@ -13,10 +13,7 @@ public class LightingPass : IPass {
     private static readonly int GBuffer1 = Shader.PropertyToID("gBuffer1");
     private static readonly int GBuffer0 = Shader.PropertyToID("gBuffer0");
     private static readonly int GDepthMap = Shader.PropertyToID("gDepthMap");
-
     private static readonly int GMatInvViewProj = Shader.PropertyToID("gMatInvViewProj");
-    private static readonly int GViewPortRay = Shader.PropertyToID("gViewPortRay");
-    private static readonly int GAmbientDiffuseSH = Shader.PropertyToID("gAmbientDiffuseSH");
 
     public LightingPass(CameraRenderer cameraRenderer) : base(cameraRenderer) {
         _material = new Material(Shader.Find("Unlit/LightingPassPS"));
@@ -27,18 +24,11 @@ public class LightingPass : IPass {
 
         if (settings.brdfLutMap != null) {
             _material.SetTexture("gBrdfLutMap", settings.brdfLutMap);
-            if (settings.irradianceMap != null) {
+            if (settings.irradianceMap != null)
                 _material.EnableKeyword("_ENABLE_IBL_DIFFUSE");
-                _material.SetTexture("gIrradianceMap", settings.irradianceMap);
-            }
-
-            if (settings.prefilterMap != null) {
+            if (settings.prefilterMap != null)
                 _material.EnableKeyword("_ENABLE_IBL_SPECULAR");
-                _material.SetTexture("gPrefilterMap", settings.prefilterMap);
-            }
         }
-        
-            
     }
     
     public override void ExecutePass(ScriptableRenderContext context) {
@@ -47,12 +37,9 @@ public class LightingPass : IPass {
         _material.SetTexture(GBuffer2, _cameraRenderer.gBufferMaps[2]);
         _material.SetTexture(GDepthMap, _cameraRenderer.depthMap);
         _material.SetMatrix(GMatInvViewProj, _cameraRenderer.matInvViewProj);
-        
-        if (_cameraRenderer.pipeline.generateIbl != null)
-            _material.SetVectorArray(GAmbientDiffuseSH, _cameraRenderer.pipeline.generateIbl.DiffuseSHVectors);
-        
         CommandBuffer cmd = new CommandBuffer();
         cmd.name = "LightingPass";
+        cmd.SetViewport(new Rect(0, 0, _cameraRenderer.width, _cameraRenderer.height));
         cmd.Blit(BuiltinRenderTextureType.None, _cameraRenderer.screenMap, _material);
         _cameraRenderer.ExecuteAndClearCmd(cmd);
         context.Submit();

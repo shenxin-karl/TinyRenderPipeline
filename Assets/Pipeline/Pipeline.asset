@@ -17,5 +17,5 @@ MonoBehaviour:
   colorLutMap: {fileID: 0}
   enableAcesToneMapping: 1
   enableGammaCorrection: 1
-  irradianceMap: {fileID: 8900000, guid: d2a3e5b9c94c3db459db6bbe72882448, type: 3}
-  prefilterMap: {fileID: 8900000, guid: f90048d0eb1a5044189a475aec402253, type: 3}
+  irradianceMap: {fileID: 8900000, guid: ba30c19db1fc309458036585284c073f, type: 3}
+  prefilterMap: {fileID: 8900000, guid: a3c8f3642d776644fbbf827cde3fd97d, type: 3}

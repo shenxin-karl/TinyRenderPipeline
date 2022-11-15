@@ -29,7 +29,6 @@ public class PostProcessingPass : IPass {
             _featureFrag |= (int)FeatureFrag.EnableGammaCorrection;
         if (settings.colorLutMap != null)
             _featureFrag |= (int)FeatureFrag.EnableColorLut;
-        
         _shader.SetInt("gFeatureFlag", _featureFrag);
     }
     
